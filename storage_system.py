@@ -61,20 +61,47 @@ class StorageSystem:
         self.controller = controller
         self.inverter = inverter
         self.batteries = batteries
+        self.capacity = sum(b.capacity for b in self.batteries)
+        self.soc = sum(b.soc for b in self.batteries)
 
-    def control(self, production, consumption):
-        pass
+    def control(self, pv_panel, house):
+        production = pv_panel['power']
+        power_demand = house['power']
+        power_to_grid = power_from_grid = 0
+        excess = production - power_demand
 
-    def charge(self, power):
-        pass
+        if excess >= 0:
+            # There is more PV production than house consumption
+            power_to_charge = self.charge(excess)
+            power_to_grid = excess - power_to_charge
+            power_to_house = self.discharge(power_demand)
+        else:
+            # There is not enough PV production to meet house consumption
+            power_to_house = self.discharge(power_demand)
+            if self.soc < self.capacity:
+                power_from_grid = self.charge(self.capacity - self.soc - power_to_house)
+            else:
+                power_from_grid = 0
+
+        # Todo Use result schema or class
+        return {
+            'power_to_grid': power_to_grid,
+            'power_to_house': power_to_house,
+            'power_from_grid': power_from_grid
+        }
 
     def discharge(self, power):
-        pass
+        if self.soc < power:
+            power = self.soc
+            self.soc = 0
+        else:
+            self.soc -= power
+        return power
 
-    @property
-    def capacity(self):
-        return sum(b.capacity for b in self.batteries)
-
-    @property
-    def soc(self):
-        return sum(b.soc for b in self.batteries)
+    def charge(self, power):
+        if self.soc + power > self.capacity:
+            power = self.capacity - self.soc
+            self.soc = self.capacity
+        else:
+            self.soc += power
+        return power
