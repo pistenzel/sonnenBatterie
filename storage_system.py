@@ -1,3 +1,6 @@
+from abc import ABC
+
+
 class Controller:
     """
     EM controller: handles the energy logic and issues all necessary commands to each of the devices
@@ -39,15 +42,44 @@ class BatteryModule:
     - Module voltage in Volts.
     - Maximum power that the battery module can charge or discharge in Watts.
     """
-    def __init__(self, capacity):
+    def __init__(self, capacity, soc):
         self.capacity = capacity
-        self.soc = 0
+        self.soc = soc
         self.temperature = 0
         self.voltage = 0
         self.max_power = 0
 
 
-class StorageSystem:
+class BaseStorageSystem(ABC):
+    """
+    sonnenBatterie base storage system. It can release energy from the battery modules into the house grid or store energy
+    from the house grid into the battery modules. Available configurations and values are:
+    - Power command in Watts. Commands can be:
+        - charge: positive Watts value
+        - discharge: negative Watts value
+    - Any value available from any of the internal components (inverter and battery modules)
+    """
+    def __init__(self, controller, inverter, batteries):
+        self.controller = controller
+        self.inverter = inverter
+        self.batteries = batteries
+        self.capacity = sum(b.capacity for b in self.batteries)
+        self.soc = sum(b.soc for b in self.batteries)
+        self.power_to_grid = 0
+        self.power_to_house = 0
+        self.power_from_grid = 0
+
+    def control(self, production, power_demand):
+        raise NotImplemented
+
+    def charge(self, power):
+        raise NotImplemented
+
+    def discharge(self, power):
+        raise NotImplemented
+
+
+class StorageSystem(BaseStorageSystem):
     """
     sonnenBatterie storage system. It can release energy from the battery modules into the house grid or store energy
     from the house grid into the battery modules. Available configurations and values are:
@@ -57,38 +89,20 @@ class StorageSystem:
     - Any value available from any of the internal components (inverter and battery modules)
     """
 
-    def __init__(self, controller, inverter, batteries):
-        self.controller = controller
-        self.inverter = inverter
-        self.batteries = batteries
-        self.capacity = sum(b.capacity for b in self.batteries)
-        self.soc = sum(b.soc for b in self.batteries)
-
-    def control(self, pv_panel, house):
-        production = pv_panel['power']
-        power_demand = house['power']
-        power_to_grid = power_from_grid = 0
+    def control(self, production, power_demand):
         excess = production - power_demand
 
         if excess >= 0:
             # There is more PV production than house consumption
             power_to_charge = self.charge(excess)
-            power_to_grid = excess - power_to_charge
-            power_to_house = self.discharge(power_demand)
+            self.power_to_grid = excess - power_to_charge
+            self.power_to_house = power_demand
         else:
             # There is not enough PV production to meet house consumption
-            power_to_house = self.discharge(power_demand)
-            if self.soc < self.capacity:
-                power_from_grid = self.charge(self.capacity - self.soc - power_to_house)
-            else:
-                power_from_grid = 0
-
-        # Todo Use result schema or class
-        return {
-            'power_to_grid': power_to_grid,
-            'power_to_house': power_to_house,
-            'power_from_grid': power_from_grid
-        }
+            power_to_discharge = power_demand - production
+            self.power_to_house = self.discharge(power_to_discharge) + production
+            self.power_from_grid = power_demand - self.power_to_house
+        return self.power_to_grid, self.power_from_grid, self.power_to_house
 
     def discharge(self, power):
         if self.soc < power:

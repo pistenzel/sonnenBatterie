@@ -1,30 +1,43 @@
-from tests.fixtures import *
+import pytest
+
+from storage_system import Inverter, BatteryModule, Controller, StorageSystem
 
 
-"""
-1. There is more PV production than house demand, the power excess is first used to charge the storage system and then sent to the grid.
-2. There here is more PV production than house demand, but the storage system is already fully charged, all the surplus energy is sent to the grid.
-3. There is less PV production than house demand, the storage system supplies power to the house and the grid provides the remaining power.
-4. There here is less PV production than house demand, but the storage system is already empty, the grid provides all the power to the house.
-5. There here is equal PV production and house demand, the storage system remains at its current state and the grid provides the remaining power.
-"""
+@pytest.fixture
+def storage_system(request):
+    num_battery_modules = request.param[0]
+    battery_capacity = request.param[1]
+    battery_soc = request.param[2]
+    controller = Controller()
+    inverter = Inverter()
+    batteries = [BatteryModule(battery_capacity, battery_soc) for _ in range(num_battery_modules)]
+    yield StorageSystem(controller, inverter, batteries)
 
-def test_production_greater_than_demand(storage_system, pv_panel, house):
-    storage_system.control(pv_panel, house)
-    assert storage_system.soc == 0
 
-def test_production_greater_than_demand_storage_full(storage_system, pv_panel, house):
-    storage_system.control(pv_panel, house)
-    assert storage_system.soc == 0
+class TestStorageSystem:
+    """
+    1. There is more PV production than house demand, the power excess is first used to charge the storage system and then sent to the grid.
+    2. There here is more PV production than house demand, but the storage system is already fully charged, all the power excess is sent to the grid.
+    3. There is less PV production than house demand, the storage system supplies power to the house and the grid provides the remaining power.
+    4. There here is less PV production than house demand, but the storage system is already empty, the grid provides all the power to the house.
+    5. There here is equal PV production and house demand, the storage system remains at its current state and the grid provides the remaining power.
+    """
 
-def test_production_less_than_demand(storage_system, pv_panel, house):
-    storage_system.control(pv_panel, house)
-    assert storage_system.soc == 0
-
-def test_production_less_than_demand_storage_empty(storage_system, pv_panel, house):
-    storage_system.control(pv_panel, house)
-    assert storage_system.soc == 0
-
-def test_production_equal_than_demand(storage_system, pv_panel, house):
-    storage_system.control(pv_panel, house)
-    assert storage_system.soc == 0
+    @pytest.mark.parametrize(
+        "storage_system, production, power_demand, expected_soc, expected_power_to_house, expected_power_to_grid, "
+        "expected_power_from_grid",
+        [
+            ([1, 100, 0], 20, 10, 10, 10, 0, 0),
+            ([1, 100, 100], 20, 10, 100, 10, 10, 0),
+            ([1, 100, 50], 10, 20, 40, 20, 0, 0),
+            ([1, 100, 0], 10, 20, 0, 10, 0, 10),
+            ([1, 100, 50], 10, 10, 50, 10, 0, 0),
+        ], indirect=['storage_system']
+    )
+    def test_storage_system(self, storage_system, production, power_demand, expected_soc,
+                            expected_power_to_grid, expected_power_to_house, expected_power_from_grid):
+        storage_system.control(production, power_demand)
+        assert storage_system.soc == expected_soc
+        assert storage_system.power_to_house == expected_power_to_house
+        assert storage_system.power_to_grid == expected_power_to_grid
+        assert storage_system.power_from_grid == expected_power_from_grid
