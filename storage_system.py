@@ -42,7 +42,7 @@ class BatteryModule:
     - Module voltage in Volts.
     - Maximum power that the battery module can charge or discharge in Watts.
     """
-    def __init__(self, capacity, soc):
+    def __init__(self, capacity, soc=0):
         self.capacity = capacity
         self.soc = soc
         self.temperature = 0
@@ -64,12 +64,14 @@ class BaseStorageSystem(ABC):
         self.inverter = inverter
         self.batteries = batteries
         self.capacity = sum(b.capacity for b in self.batteries)
-        self.soc = sum(b.soc for b in self.batteries)
+        self.soc = 0
+        self.production = 0
+        self.power_demand = 0
         self.power_to_grid = 0
         self.power_to_house = 0
         self.power_from_grid = 0
 
-    def control(self, production, power_demand):
+    def control(self, **kwargs):
         raise NotImplemented
 
     def charge(self, power):
@@ -89,19 +91,19 @@ class StorageSystem(BaseStorageSystem):
     - Any value available from any of the internal components (inverter and battery modules)
     """
 
-    def control(self, production, power_demand):
-        excess = production - power_demand
+    def control(self, **kwargs):
+        excess = self.production - self.power_demand
 
         if excess >= 0:
             # There is more PV production than house consumption
             power_to_charge = self.charge(excess)
             self.power_to_grid = excess - power_to_charge
-            self.power_to_house = power_demand
+            self.power_to_house = self.power_demand
         else:
             # There is not enough PV production to meet house consumption
-            power_to_discharge = power_demand - production
-            self.power_to_house = self.discharge(power_to_discharge) + production
-            self.power_from_grid = power_demand - self.power_to_house
+            power_to_discharge = self.power_demand - self.production
+            self.power_to_house = self.discharge(power_to_discharge) + self.production
+            self.power_from_grid = self.power_demand - self.power_to_house
         return self.power_to_grid, self.power_from_grid, self.power_to_house
 
     def discharge(self, power):
