@@ -8,22 +8,6 @@ from storage_system import Inverter, BatteryModule, Controller, StorageSystem
 
 
 @pytest.fixture
-def pv_panel():
-    return {'power': 10, 'voltage': 10, 'current': 10}
-
-
-@pytest.fixture
-def house():
-    return {'power': 10, 'voltage': 10, 'current': 10, 'frequency': 10}
-
-
-@pytest.fixture
-def grid():
-    return {'power': 10, 'voltage': 10, 'frequency': 10
-    }
-
-
-@pytest.fixture
 def inverter():
     return Inverter()
 
@@ -39,6 +23,13 @@ def controller():
 
 
 @pytest.fixture
-def storage_system(controller, inverter, batteries):
-    return StorageSystem(controller, inverter, batteries)
+def storage_system(request):
+    num_inverter = request.param[0]  # Not used at the moment as all systems have only 1
+    num_controller = request.param[1]  # Not used at the moment as all systems have only 1
+    num_battery_modules = request.param[2]
+    battery_capacity = request.param[3]
+    batteries = [BatteryModule(battery_capacity) for _ in range(num_battery_modules)]
+    storage_system = StorageSystem(controller, inverter, batteries)
+    yield storage_system
+    del storage_system
 

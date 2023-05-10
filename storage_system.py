@@ -26,12 +26,12 @@ class Inverter:
     - Inverter sensed grid Voltage in Volts
     """
     def __init__(self):
-        self.max_power = 0
-        self.voltage = 0
-        self.current = 0
-        self.power = 0
-        self.grid_frequency = 0
-        self.grid_voltage = 0
+        self.max_power: float = 0
+        self.voltage: float = 0
+        self.current: float = 0
+        self.power: float = 0
+        self.grid_frequency: float = 0
+        self.grid_voltage: float = 0
 
 
 class BatteryModule:
@@ -43,11 +43,11 @@ class BatteryModule:
     - Maximum power that the battery module can charge or discharge in Watts.
     """
     def __init__(self, capacity, soc=0):
-        self.capacity = capacity
-        self.soc = soc
-        self.temperature = 0
-        self.voltage = 0
-        self.max_power = 0
+        self.capacity: float = capacity
+        self.soc: float = soc
+        self.temperature: float = 0
+        self.voltage: float = 0
+        self.max_power: float = 0
 
 
 class BaseStorageSystem(ABC):
@@ -60,16 +60,23 @@ class BaseStorageSystem(ABC):
     - Any value available from any of the internal components (inverter and battery modules)
     """
     def __init__(self, controller, inverter, batteries):
-        self.controller = controller
-        self.inverter = inverter
-        self.batteries = batteries
-        self.capacity = sum(b.capacity for b in self.batteries)
-        self.soc = 0
-        self.production = 0
-        self.power_demand = 0
-        self.power_to_grid = 0
-        self.power_to_house = 0
-        self.power_from_grid = 0
+        self.controller: Controller = controller
+        self.inverter: Inverter = inverter
+        self.batteries: list[BatteryModule] = batteries
+        self.capacity: float = sum(b.capacity for b in self.batteries)
+        self.soc: float = 0
+        self.production: float = 0
+        self.power_demand: float = 0
+        self.power_to_grid: float = 0
+        self.power_to_house: float = 0
+        self.power_from_grid: float = 0
+
+    def set(self, key: str, value: float) -> bool:
+        self.__setattr__(key, value)
+        return True
+
+    def get(self, key: str) -> float:
+        return self.__getattribute__(key)
 
     def control(self, **kwargs):
         raise NotImplemented
@@ -95,18 +102,18 @@ class StorageSystem(BaseStorageSystem):
         excess = self.production - self.power_demand
 
         if excess >= 0:
-            # There is more PV production than house consumption
+            # There is more PV production than house demand
             power_to_charge = self.charge(excess)
             self.power_to_grid = excess - power_to_charge
             self.power_to_house = self.power_demand
         else:
-            # There is not enough PV production to meet house consumption
+            # There is not enough PV production to meet house demand
             power_to_discharge = self.power_demand - self.production
             self.power_to_house = self.discharge(power_to_discharge) + self.production
             self.power_from_grid = self.power_demand - self.power_to_house
         return self.power_to_grid, self.power_from_grid, self.power_to_house
 
-    def discharge(self, power):
+    def discharge(self, power: float) -> float:
         if self.soc < power:
             power = self.soc
             self.soc = 0
@@ -114,7 +121,7 @@ class StorageSystem(BaseStorageSystem):
             self.soc -= power
         return power
 
-    def charge(self, power):
+    def charge(self, power: float) -> float:
         if self.soc + power > self.capacity:
             power = self.capacity - self.soc
             self.soc = self.capacity
